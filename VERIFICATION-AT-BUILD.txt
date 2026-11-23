@@ -1,0 +1,33 @@
+Nerix Global Platform 0.4.0 — what was actually checked when this package was built
+Environment: no internet, no PostgreSQL/PGlite, no express/zod/react/pg packages installed. Node v22.22.2.
+
+1. Syntax: 55 TypeScript/TSX files parsed with the TypeScript compiler (0 problems); all gateway/shared JavaScript passed node --check;
+   deploy/install-gateway.sh passed bash -n; every JSON file parsed; shared/*.d.ts declarations compiled.
+2. Logic tests (node --test tests/voice-pure.test.ts) — results below.
+3. Gateway routing: a route object in the exact shape the dashboard generates was accepted by gateway/routing.js; the transfer gates
+   (caller-ID not verified, unlisted number, public-number loop) refused as designed.
+4. Type check of the new server files against stubbed libraries: no genuine errors (stub-related noise only).
+5. Secrets scan of the whole package: no keys, tokens, passwords or database dumps; private data/ and backups/ folders excluded.
+
+NOT RUN HERE (do these first on Replit): npm run verify (types against real libraries, ALL tests incl. tests/voice-gateway.test.ts and the
+older 0.3.1 suites, production build). No SQL was executed. No live call, Asterisk, VoIPstudio, OpenAI, Resend, Cloudflare or Oracle step was run.
+
+--- tests/voice-pure.test.ts ---
+ok 1 - charge rounds up to the next micro-dollar and matches the published $0.50/minute rate
+ok 2 - admission reserves up to 60s and requires at least 15 funded seconds
+ok 3 - funded seconds never cost more than the available credit
+ok 4 - heartbeat extends funding only from unreserved credit and stops at the funded deadline
+ok 5 - settlement bills only funded connected seconds and records any overrun
+ok 6 - gateway signature: sign/verify round trip, tamper and replay-window rejection
+ok 7 - staff lookup resolves roles and names generically, and routes unknown requests only to the unique front desk
+ok 8 - intake: placeholders and unconfirmed details are rejected; legacy "patient" maps to customer
+ok 9 - policy: a decline or failed sales call blocks further transfers
+ok 10 - callback numbers: caller ID, local numbers and invalid input
+ok 11 - opening hours: weekday window, closed days and timezone handling
+ok 12 - usage counters are validated
+ok 13 - generated instructions are industry-neutral, disclose AI honestly and carry the configured facts
+ok 14 - the real gateway client signs requests exactly as the portal verifies them
+ok 15 - a dashboard-generated route is accepted by the gateway routing validator and enforces transfer gates
+# tests 15
+# pass 15
+# fail 0

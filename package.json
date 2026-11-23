@@ -1,0 +1,57 @@
+{
+  "name": "nerix-global-platform",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Nerix Global \u2014 portable customer and operations workspace",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "node --import tsx server/index.ts",
+    "start": "node --import tsx server/index.ts --production-assets",
+    "build": "npm run faq:build && vite build",
+    "check": "tsc --noEmit",
+    "test": "npm run faq:build && node --import tsx --test --test-concurrency=1 tests/*.test.ts",
+    "verify": "npm run check && npm test && npm run build",
+    "db:migrate": "node --import tsx scripts/migrate.ts",
+    "backup": "node --import tsx scripts/backup.ts",
+    "restore": "node --import tsx scripts/restore.ts",
+    "owner:reset-password": "node --import tsx scripts/reset-password.ts",
+    "faq:build": "node --import tsx scripts/build-faq.ts",
+    "gateway:smoke": "node --import tsx scripts/gateway-smoke.ts",
+    "test:pure": "node --test tests/voice-pure.test.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "helmet": "^8.1.0",
+    "libphonenumber-js": "^1.12.24",
+    "lucide-react": "^0.468.0",
+    "luxon": "^3.7.2",
+    "pg": "^8.16.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tsx": "^4.20.6",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/express": "^5.0.3",
+    "@types/jsdom": "^30.0.0",
+    "@types/luxon": "^3.7.1",
+    "@types/node": "^24.10.0",
+    "@types/pg": "^8.15.6",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@types/supertest": "^6.0.3",
+    "@vitejs/plugin-react": "^5.1.0",
+    "jsdom": "^26.1.0",
+    "supertest": "^7.1.4",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.2"
+  }
+}
