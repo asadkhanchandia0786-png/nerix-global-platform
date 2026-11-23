@@ -1,0 +1,26 @@
+[Unit]
+Description=Nerix Sarah SIP gateway
+After=network-online.target asterisk.service
+Wants=network-online.target
+Requires=asterisk.service
+
+[Service]
+Type=simple
+User=nerix-gateway
+Group=nerix-gateway
+WorkingDirectory=/opt/nerix-gateway
+EnvironmentFile=/etc/nerix/gateway.env
+ExecStart=/usr/bin/node /opt/nerix-gateway/gateway/main.js
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+StateDirectory=nerix-gateway
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/nerix-gateway
+
+[Install]
+WantedBy=multi-user.target

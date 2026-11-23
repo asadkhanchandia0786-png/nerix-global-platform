@@ -1,0 +1,10 @@
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  X-Frame-Options: SAMEORIGIN
+/chat-config.js
+  Cache-Control: no-cache
+/chat-widget.js
+  Cache-Control: no-cache
+/chat-widget.css
+  Cache-Control: no-cache

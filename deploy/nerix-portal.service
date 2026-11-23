@@ -1,0 +1,24 @@
+[Unit]
+Description=Nerix Global dashboard and API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=nerix-portal
+Group=nerix-portal
+WorkingDirectory=/opt/nerix-portal
+EnvironmentFile=/etc/nerix-portal/portal.env
+ExecStart=/usr/bin/node --import tsx server/index.ts --production-assets
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/nerix-portal/data
+
+[Install]
+WantedBy=multi-user.target

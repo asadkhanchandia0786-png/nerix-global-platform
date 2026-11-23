@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "trunks": [
+    {
+      "id": "voipstudio",
+      "serverEnv": "VS_SERVER",
+      "usernameEnv": "VS_USERNAME",
+      "passwordEnv": "VS_PASSWORD",
+      "trustedIpsEnv": "VS_TRUSTED_IPS",
+      "inboundMatch": "ip",
+      "transport": "udp",
+      "port": 5060,
+      "mediaEncryption": "no"
+    }
+  ],
+  "routes": [
+    {
+      "did": "+442079460100",
+      "trunk": "voipstudio",
+      "workspaceKey": "example-business",
+      "locationKey": "london",
+      "publicNumbers": [
+        "+442079460900"
+      ],
+      "inboundAliases": [],
+      "transferNumbers": [
+        "+442079460777"
+      ]
+    },
+    {
+      "did": "+441614960100",
+      "trunk": "voipstudio",
+      "workspaceKey": "example-business",
+      "locationKey": "manchester",
+      "publicNumbers": [
+        "+441614960900"
+      ],
+      "inboundAliases": [],
+      "transferNumbers": [
+        "+442079460777"
+      ]
+    },
+    {
+      "did": "+441214960100",
+      "trunk": "voipstudio",
+      "workspaceKey": "example-business",
+      "locationKey": "birmingham",
+      "publicNumbers": [
+        "+441214960900"
+      ],
+      "inboundAliases": [],
+      "transferNumbers": [
+        "+442079460777"
+      ]
+    }
+  ]
+}

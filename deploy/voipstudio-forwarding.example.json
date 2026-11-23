@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "trunks": [
+    {
+      "id": "vs-forward",
+      "direction": "inbound",
+      "trustedIpsEnv": "VS_FORWARDING_IPS",
+      "inboundMatch": "ip",
+      "transport": "udp",
+      "mediaEncryption": "no",
+      "maxForwardingCalls": 5
+    },
+    {
+      "id": "vs-payg",
+      "direction": "outbound",
+      "serverEnv": "VS_SERVER",
+      "usernameEnv": "VS_USERNAME",
+      "passwordEnv": "VS_PASSWORD",
+      "trustedIpsEnv": "VS_TRUSTED_IPS",
+      "transport": "tls",
+      "port": 5061,
+      "mediaEncryption": "sdes",
+      "maxOutboundCalls": 5
+    }
+  ],
+  "routes": [
+    {
+      "did": "+442079460100",
+      "trunk": "vs-forward",
+      "outboundTrunk": "vs-payg",
+      "workspaceKey": "example-business",
+      "locationKey": "london",
+      "publicNumbers": [
+        "+442079460900"
+      ],
+      "inboundAliases": [],
+      "transferNumbers": [
+        "+442079460777"
+      ],
+      "callerIdVerified": false
+    }
+  ]
+}
+
