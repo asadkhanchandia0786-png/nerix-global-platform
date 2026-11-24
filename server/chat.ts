@@ -4,6 +4,7 @@ import type {DB,Query,Row} from './db.ts';
 import {Auth,hash,randomToken,checkScope,validScope} from './auth.ts';
 import {id,need,text,email,uuid,audit} from './core.ts';
 import {serviceProfile} from './services.ts';
+import {orgLock} from './activation.ts';
 import {chatInstructions,faqReply} from './chat-policy.ts';
 
 export interface ChatConfig {
@@ -135,7 +136,7 @@ export function registerPublicChat(app:express.Express,db:DB,config:ChatConfig={
       await q.query('UPDATE chat_conversations SET visitor_seen_at=now(),updated_at=now() WHERE id=$1',[c.id]);
       if(current.status==='human')return null;
       const turns=Number((await q.query("SELECT count(*) FROM chat_messages WHERE conversation_id=$1 AND kind='openai'",[c.id])).rows[0].count);
-      let useAI=aiReady&&turns<40;
+      let useAI=aiReady&&turns<40&&!(site.org_id&&(await orgLock(q,site.org_id)).locked);   // locked workspaces get prepared FAQ replies only
       if(useAI){const quota=(await q.query("INSERT INTO chat_ai_budget(day,count) VALUES((now() AT TIME ZONE 'UTC')::date,1) ON CONFLICT(day) DO UPDATE SET count=chat_ai_budget.count+1 RETURNING count")).rows[0];useAI=quota.count<=(config.dailyLimit||200);}
       if(!useAI){await addMessage(q,c.id,'assistant','Nerix help',faqReply(b.body,site),`reply:${m.id}`,'faq');return null;}
       await q.query("UPDATE chat_conversations SET ai_busy_until=now()+interval '40 seconds',ai_request_id=$2 WHERE id=$1",[c.id,m.id]);

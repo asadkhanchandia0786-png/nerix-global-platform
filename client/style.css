@@ -18,3 +18,9 @@
 
 .grid.four{grid-template-columns:1.4fr 1.2fr 1.2fr auto;gap:12px}.hours-list{display:grid;gap:8px;margin:12px 0 20px}.hours-list .check{align-items:center}.hours-list input[type=time]{width:100%}
 @media(max-width:800px){.grid.four{grid-template-columns:1fr}}
+
+.auth-tabs{display:flex;gap:4px;margin:0 0 18px;padding:4px;border:1px solid var(--line);border-radius:12px;background:#f6f9fa}
+.auth-tabs button{flex:1;padding:9px 8px;border-radius:9px;font-size:12px;font-weight:600;color:var(--muted);background:transparent}
+.auth-tabs button.on{background:var(--white);color:var(--ink);box-shadow:0 1px 3px rgba(10,32,43,.12)}
+.lock-notice{border-left:4px solid #b45309;background:#fff7ed}
+.lock-fieldset{border:0;padding:0;margin:0;min-width:0}

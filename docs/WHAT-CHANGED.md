@@ -1,3 +1,6 @@
+# 0.5.0 (latest)
+Self-serve sign-up with email codes, a credit/activation lock for new workspaces, and owner tools to create and edit customer accounts. See SELF-SIGNUP-0.5.0.md.
+
 # What this package is, what was verified, what was not
 
 Built from three sources you supplied: **Nerix Global App 0.3.1** (dashboard, chat, CRM, wallet), **Dentive/Sarah 0.6.16** (the gateway and the call API), and **Nerix website 1.0.6**. Your three originals were only read; they were not modified.

@@ -10,6 +10,7 @@ import { buildReceptionInstructions, LANGUAGES, VOICE_NAMES } from './reception.
 import { validateHours, isAfterHours } from '../shared/operating-hours.js';
 import { STAFF_ROLES } from '../shared/reception-rules.js';
 import { queueEmail, resetEmail, emailEnabled } from './email.ts';
+import { requireUnlocked } from './activation.ts';
 
 const e164 = z.string().regex(/^\+[1-9]\d{6,14}$/, 'Use international format, for example +442079460100.');
 const optionalE164 = z.union([e164, z.literal(''), z.null()]).optional().transform(v => v || null);
@@ -43,7 +44,7 @@ export function registerVoice(app: Express, db: DB, auth: Auth, cfg: GatewayConf
     res.json({ numbers: numbers.map(n => ({ ...n, route: routes[n.id] || null })), gatewayEnabled: cfg.enabled, emailEnabled: emailEnabled() });
   });
   app.post('/api/org/:org/voice/numbers', async (req, res) => {
-    const org = orgId(req), a = await auth.access(req, org, 'settings', true); platformOwner(a);
+    const org = orgId(req), a = await auth.access(req, org, 'settings', true); platformOwner(a); await requireUnlocked(db, org);
     const b = z.object({ locationId: uuid, e164, label: z.string().trim().max(80).default(''), includedChannels: z.number().int().min(1).max(20).default(2), extraChannels: z.number().int().min(0).max(20).default(0) }).parse(req.body);
     const loc = (await db.query('SELECT id,company_id FROM locations WHERE id=$1 AND org_id=$2', [b.locationId, org])).rows[0]; need(loc, 400, 'Choose a location in this workspace.');
     const nid = id();
@@ -54,6 +55,7 @@ export function registerVoice(app: Express, db: DB, auth: Auth, cfg: GatewayConf
     const org = orgId(req), a = await auth.access(req, org, 'settings', true); platformOwner(a);
     const b = z.object({ status: z.enum(['active', 'paused', 'released']).optional(), label: z.string().trim().max(80).optional(), includedChannels: z.number().int().min(1).max(20).optional(), extraChannels: z.number().int().min(0).max(20).optional() }).parse(req.body);
     const nid = uuid.parse(req.params.number);
+    if (!(b.status === 'paused' || b.status === 'released')) await requireUnlocked(db, org);   // pausing or releasing is always allowed
     if (b.status === 'released') need(!(await db.query('SELECT 1 FROM inbound_calls WHERE phone_number_id=$1 AND ended_at IS NULL', [nid])).rows.length, 409, 'Wait for active calls to finish before releasing this number.');
     const r = await db.query('UPDATE phone_numbers SET status=COALESCE($3,status),label=COALESCE($4,label),included_channels=COALESCE($5,included_channels),extra_channels=COALESCE($6,extra_channels) WHERE id=$1 AND org_id=$2 RETURNING id',
       [nid, org, b.status ?? null, b.label ?? null, b.includedChannels ?? null, b.extraChannels ?? null]);
@@ -72,7 +74,7 @@ export function registerVoice(app: Express, db: DB, auth: Auth, cfg: GatewayConf
   app.put('/api/org/:org/voice/settings/:location', async (req, res) => {
     const org = orgId(req), a = await auth.access(req, org, 'agents', true), locationId = uuid.parse(req.params.location);
     const loc = (await db.query('SELECT id,company_id FROM locations WHERE id=$1 AND org_id=$2', [locationId, org])).rows[0]; need(loc, 404, 'Location not found.'); checkScope(a, loc.company_id, loc.id);
-    const b = settingsBody.parse(req.body);
+    const b = settingsBody.parse(req.body); await requireUnlocked(db, org);
     let hours; try { hours = validateHours(b.weeklyHours); } catch { need(false, 400, 'Opening hours must list seven days (Sunday first) with valid, non-overlapping HH:MM times.'); }
     const ids = new Set<string>(), defaults = new Set<string>();
     for (const t of b.transferTargets) {
@@ -151,7 +153,7 @@ export function registerPasswordReset(app: Express, db: DB, auth: Auth, origin?:
     await db.transaction(async q => {
       const r = (await q.query('SELECT * FROM password_resets WHERE token_hash=$1 FOR UPDATE', [hash(b.token)])).rows[0];
       need(r && !r.used_at && new Date(r.expires_at) > new Date(), 400, 'This reset link is invalid or has expired. Request a new one.');
-      await q.query('UPDATE users SET password_hash=$1 WHERE id=$2', [newHash, r.user_id]);
+      await q.query('UPDATE users SET password_hash=$1,email_verified_at=COALESCE(email_verified_at,now()) WHERE id=$2', [newHash, r.user_id]);   // the link proves control of the mailbox
       await q.query('DELETE FROM sessions WHERE user_id=$1', [r.user_id]);
       await q.query('UPDATE password_resets SET used_at=now() WHERE token_hash=$1', [r.token_hash]);
       await audit(q, r.user_id, null, 'auth.password_reset');

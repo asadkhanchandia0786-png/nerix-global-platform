@@ -45,7 +45,7 @@ export class Auth {
   cookie(req: Request) { return (req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('nerix_session='))?.slice(14) || ''; }
   csrf(req: Request) { return hash(`nerix-csrf:${this.cookie(req)}`); }
   async user(req: Request) {
-    const user = (await this.db.query('SELECT u.id,u.email,u.name,u.platform_role,u.active FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true', [hash(this.cookie(req))])).rows[0];
+    const user = (await this.db.query('SELECT u.id,u.email,u.name,u.platform_role,u.active FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now() AND u.active=true AND u.email_verified_at IS NOT NULL', [hash(this.cookie(req))])).rows[0];
     need(user, 401, 'Please sign in.'); return user;
   }
   async login(res: Response, userId: string) {

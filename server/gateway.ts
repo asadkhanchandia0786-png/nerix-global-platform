@@ -14,6 +14,7 @@ import { isAfterHours } from '../shared/operating-hours.js';
 import { buildReceptionInstructions, defaultGreeting, defaultSettings, VOICE_NAMES, type ReceptionSettings } from './reception.ts';
 import { admissionBudget, renewBudget, settleBudget } from './voice-math.ts';
 import { queueEmail, callbackEmail } from './email.ts';
+import { orgLock } from './activation.ts';
 
 export interface GatewayConfig { enabled: boolean; secret: string; maxTransfers: number; appOrigin?: string }
 export class GatewayError extends Error { constructor(public status: number, public reason: string) { super(reason); } }
@@ -111,6 +112,7 @@ async function authorize(c: Query, b: Row, cfg: GatewayConfig) {
   const internal = row.billing_mode === 'internal';
   if (row.paused || row.number_status !== 'active') return deny('service_unavailable');
   if (row.is_demo && !internal) return deny('demo_workspace');
+  if (!internal && (await orgLock(c, row.org_id)).locked) return deny('activation_required');   // unpaid self-signups cannot spend OpenAI or VoIP credit
   const settings = await loadSettings(c, row.org_id, row.location_id, row.company_name);
   const open = Number((await c.query('SELECT COUNT(*) AS n FROM inbound_calls WHERE phone_number_id=$1 AND ended_at IS NULL', [row.number_id])).rows[0].n);
   if (open >= Number(row.included_channels) + Number(row.extra_channels)) return deny('channels_busy');

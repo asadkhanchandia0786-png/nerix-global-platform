@@ -20,7 +20,7 @@ export async function openDB(url?: string, path = 'data/postgres'): Promise<DB> 
   return { embedded, query: (s, p) => locked(() => embedded.query(s, p)), transaction: fn => locked(() => embedded.transaction(tx => fn(tx))), close: () => locked(() => embedded.close()) };
 }
 export async function migrate(db: DB) {
-  const files = [['001','001-foundation.sql'],['002','002-live-chat.sql'],['003','003-internal-companies.sql'],['004','004-business-software.sql'],['005','005-company-software-billing.sql'],['006','006-inbound-voice.sql']] as const;
+  const files = [['001','001-foundation.sql'],['002','002-live-chat.sql'],['003','003-internal-companies.sql'],['004','004-business-software.sql'],['005','005-company-software-billing.sql'],['006','006-inbound-voice.sql'],['007','007-self-signup.sql']] as const;
   await db.transaction(async tx => {
     // A database advisory lock prevents concurrent first starts from applying schema twice.
     await tx.query('SELECT pg_advisory_xact_lock(7011001)');

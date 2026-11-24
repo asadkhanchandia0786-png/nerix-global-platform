@@ -25,7 +25,7 @@ const app=createApp(db,{mode:mode as 'demo'|'pilot',setupToken,origin,trustProxy
 let vite:Awaited<ReturnType<typeof import('vite')['createServer']>>|undefined;
 if(built){await stat('dist/index.html');app.use(express.static(resolve('dist'),{index:false}));app.get('/{*path}',(_req,res)=>res.sendFile(resolve('dist/index.html')));}
 else{const {createServer}=await import('vite');vite=await createServer({server:{middlewareMode:true},appType:'spa'});app.use(vite.middlewares);}
-const server=app.listen(port,'0.0.0.0',()=>console.log(`Nerix Global v0.4.0 · ${mode} mode · port ${port}. Inbound call gateway API: ${gateway.enabled?'ENABLED':'off'}. Email (Resend): ${emailEnabled()?'on':'off'}. Text AI chat: ${process.env.CHAT_AI_ENABLED==='true'&&process.env.OPENAI_API_KEY?'enabled':'offline (FAQ help available)'}. Card payments are manual.`));
+const server=app.listen(port,'0.0.0.0',()=>console.log(`Nerix Global v0.5.0 · ${mode} mode · port ${port}. Inbound call gateway API: ${gateway.enabled?'ENABLED':'off'}. Email (Resend): ${emailEnabled()?'on':'off'}. Text AI chat: ${process.env.CHAT_AI_ENABLED==='true'&&process.env.OPENAI_API_KEY?'enabled':'offline (FAQ help available)'}. Card payments are manual.`));
 // Maintenance runs every 15 s while the service is in use (calls, chats, staff) and only every 15 min when idle,
 // so a serverless database such as Neon can sleep between visits instead of being kept awake all month.
 let working=false,lastTouch=Date.now(),timer:NodeJS.Timeout|undefined,stopping=false;

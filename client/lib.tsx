@@ -4,7 +4,7 @@ export type Data=Record<string,any>;
 let csrf='';export const setCsrf=(token:string)=>{csrf=token;};
 export async function api(path:string,method='GET',body?:unknown){
   const r=await fetch(`/api${path}`,{method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-Nerix-Client':'workspace',...(csrf?{'X-CSRF-Token':csrf}:{})},body:body===undefined?undefined:JSON.stringify(body)});
-  const data=await r.json();if(!r.ok){if(r.status===401&&!path.startsWith('/auth'))window.dispatchEvent(new Event('session-expired'));throw new Error(data.error||'Request failed.');}return data;
+  const data=await r.json();if(!r.ok){if(r.status===401&&!path.startsWith('/auth'))window.dispatchEvent(new Event('session-expired'));const err=new Error(data.error||'Request failed.');(err as any).data=data;throw err;}return data;
 }
 export interface Context {me:Data;org:string;meta:Data;refresh:()=>void;epoch:number;navigate:(page:string)=>void;notify:(s:string)=>void}
 export const AppContext=createContext<Context>({} as Context);export const useApp=()=>useContext(AppContext);
@@ -53,3 +53,6 @@ export function ScopeFields({meta,company,location,onCompany,onLocation}:{meta:D
 export function Success({children}:{children:ReactNode}){return <div className="success"><CheckCircle2 size={18}/>{children}</div>;}
 export function LinkButton({children,onClick}:{children:ReactNode;onClick:()=>void}){return <button type="button" className="text-button" onClick={onClick}>{children}<ArrowUpRight size={15}/></button>;}
 export class Boundary extends React.Component<{children:ReactNode},{error:boolean}>{state={error:false};static getDerivedStateFromError(){return {error:true};}render(){return this.state.error?<div className="fatal"><h1>Let’s reload your workspace.</h1><p>An unexpected screen error occurred. Your saved data is still on the server.</p><button className="button primary" onClick={()=>location.reload()}>Reload</button></div>:this.props.children;}}
+
+// Shown on screens that spend AI or phone credit while a self-registered workspace is still locked.
+export function LockBanner({lock}:{lock?:Data}){return lock?.locked?<div className="notice lock-notice" role="status"><strong>{lock.status==='suspended'?'Workspace locked':'Awaiting activation'}.</strong> {lock.reason}</div>:null;}

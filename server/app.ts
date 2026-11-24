@@ -15,7 +15,9 @@ import {serviceProfile,serviceAccessInput} from './services.ts';
 import {registerBusiness} from './business.ts';
 import {registerGateway,type GatewayConfig} from './gateway.ts';
 import {registerVoice,registerPasswordReset} from './voice.ts';
-import {queueEmail,inviteEmail} from './email.ts';
+import {queueEmail,inviteEmail,emailEnabled} from './email.ts';
+import {registerSignup,sendCodeIfDue} from './signup.ts';
+import {requireUnlocked,orgLock} from './activation.ts';
 export interface Config { mode:'demo'|'pilot'; setupToken:string; origin?:string; trustProxy?:boolean; developmentAssets?:boolean; chat?:ChatConfig; gateway?:GatewayConfig }
 export function createApp(db: DB,config: Config) {
   const app=express(),auth=new Auth(db,!!config.origin?.startsWith('https:'));
@@ -37,13 +39,13 @@ export function createApp(db: DB,config: Config) {
         need(!req.get('Origin')||req.get('Origin')===expected,403,'Request origin is not permitted.');
         need(req.get('Sec-Fetch-Site')!=='cross-site',403,'Cross-site request rejected.');
         need(req.is('application/json')&&req.get('X-Nerix-Client')==='workspace',415,'Use the workspace application.');
-        if(!['/auth/login','/auth/setup','/auth/join','/auth/signup','/auth/forgot','/auth/reset'].includes(req.path)) need(!!auth.cookie(req)&&equal(req.get('X-CSRF-Token')||'',auth.csrf(req)),403,'Session expired. Refresh and sign in again.');
+        if(!['/auth/login','/auth/setup','/auth/join','/auth/signup','/auth/forgot','/auth/reset','/auth/register','/auth/verify-email','/auth/resend-code'].includes(req.path)) need(!!auth.cookie(req)&&equal(req.get('X-CSRF-Token')||'',auth.csrf(req)),403,'Session expired. Refresh and sign in again.');
       }
       next();
     } catch(e) {next(e);}
   });
-  app.get('/api/health',async(_req,res)=>{await db.query('SELECT 1');res.json({ok:true,version:'0.4.0',mode:config.mode,liveCalls:gatewayConfig.enabled,liveCardPayments:false,liveTextChat:!!config.chat?.aiEnabled&&!!config.chat?.apiKey});});
-  app.get('/api/auth/status',async(_req,res)=>res.json({setupRequired:!(await db.query('SELECT 1 FROM users LIMIT 1')).rows.length,mode:config.mode}));
+  app.get('/api/health',async(_req,res)=>{await db.query('SELECT 1');res.json({ok:true,version:'0.5.0',mode:config.mode,liveCalls:gatewayConfig.enabled,liveCardPayments:false,liveTextChat:!!config.chat?.aiEnabled&&!!config.chat?.apiKey});});
+  app.get('/api/auth/status',async(_req,res)=>res.json({setupRequired:!(await db.query('SELECT 1 FROM users LIMIT 1')).rows.length,mode:config.mode,selfSignup:emailEnabled()}));
   const credentials=z.object({email,password:z.string().min(12).max(128)});
   app.post('/api/auth/setup',async(req,res)=>{
     await auth.limit(`setup:${req.ip}`);
@@ -62,6 +64,7 @@ export function createApp(db: DB,config: Config) {
     await auth.limit(`ip:${req.ip}`); await auth.limit(`email:${b.email}`);
     const u=(await db.query('SELECT * FROM users WHERE email=$1',[b.email])).rows[0];
     const valid=await verifyPassword(b.password,u?.password_hash||'missing:no-match'); need(u?.active&&valid,401,'Email or password is incorrect.');
+    if(!u.email_verified_at){if(emailEnabled())await db.transaction(q=>sendCodeIfDue(q,u));return res.status(403).json({error:'Please verify your email first. If a code was not sent in the last minute, a new one is on its way.',needsVerification:true,email:u.email});}
     await auth.login(res,u.id);await audit(db,u.id,null,'auth.login');res.json({ok:true});
   });
   app.post('/api/auth/signup',async(req,res)=>{
@@ -94,7 +97,7 @@ export function createApp(db: DB,config: Config) {
     const companies=(await db.query('SELECT * FROM companies WHERE org_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY name',[org,a.companyId])).rows;
     const prices=Object.fromEntries(await Promise.all(Object.keys(SERVICES).map(async s=>[s,await rateFor(db,org,s as keyof typeof SERVICES)])));
     if(a.role!=='owner')orgRow.settings={connectionStatus:orgRow.settings?.connectionStatus||'Not requested',recordingsEnabled:false};
-    res.json({services:await serviceProfile(db,a.user,org),org:orgRow,companies,locations,prices,role:a.role,scope:{companyId:a.companyId,locationId:a.locationId},internal:a.internal,integrations:INTEGRATIONS});
+    res.json({lock:await orgLock(db,org),services:await serviceProfile(db,a.user,org),org:orgRow,companies,locations,prices,role:a.role,scope:{companyId:a.companyId,locationId:a.locationId},internal:a.internal,integrations:INTEGRATIONS});
   });
   app.get('/api/org/:org/overview',async(req,res)=>{
     const org=orgId(req),a=await auth.access(req,org,'overview'),p:any[]=[org],sc=scopeSQL(a,p,'l.');
@@ -129,11 +132,11 @@ export function createApp(db: DB,config: Config) {
   });
   const campaignInput=z.object({name:text(),companyId:uuid,locationId:uuid,mode:z.enum(['leadgen','followup']),service,rules:rulesSchema,authorization:z.boolean(),status:z.enum(['draft','ready','paused'])});
   app.post('/api/org/:org/campaigns',async(req,res)=>{
-    const org=orgId(req),a=await auth.access(req,org,'campaigns',true),b=campaignInput.parse(req.body);checkScope(a,b.companyId,b.locationId);await validScope(db,org,b.companyId,b.locationId);
+    const org=orgId(req),a=await auth.access(req,org,'campaigns',true),b=campaignInput.parse(req.body);await requireUnlocked(db,org);checkScope(a,b.companyId,b.locationId);await validScope(db,org,b.companyId,b.locationId);
     const row=(await db.query('INSERT INTO campaigns(id,org_id,company_id,location_id,name,mode,service,rules,"authorization",status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *',[id(),org,b.companyId,b.locationId,b.name,b.mode,b.service,JSON.stringify(b.rules),b.authorization,b.status])).rows[0];await audit(db,a.user.id,org,'campaign.created',{id:row.id});res.json(row);
   });
   app.patch('/api/org/:org/campaigns/:campaign',async(req,res)=>{
-    const org=orgId(req),a=await auth.access(req,org,'campaigns',true),cid=uuid.parse(req.params.campaign),b=campaignInput.parse(req.body);checkScope(a,b.companyId,b.locationId);await validScope(db,org,b.companyId,b.locationId);
+    const org=orgId(req),a=await auth.access(req,org,'campaigns',true),cid=uuid.parse(req.params.campaign),b=campaignInput.parse(req.body);await requireUnlocked(db,org);checkScope(a,b.companyId,b.locationId);await validScope(db,org,b.companyId,b.locationId);
     const p:any[]=[org,cid];need((await db.query(`SELECT 1 FROM campaigns WHERE org_id=$1 AND id=$2${scopeSQL(a,p)}`,p)).rows.length,404,'Campaign not found.');
     await db.query('UPDATE campaigns SET name=$1,company_id=$2,location_id=$3,mode=$4,service=$5,rules=$6,"authorization"=$7,status=$8 WHERE org_id=$9 AND id=$10',[b.name,b.companyId,b.locationId,b.mode,b.service,JSON.stringify(b.rules),b.authorization,b.status,org,cid]);await audit(db,a.user.id,org,'campaign.updated',{cid});res.json({ok:true});
   });
@@ -147,7 +150,7 @@ export function createApp(db: DB,config: Config) {
     res.json(rows.map(l=>({...l,blocked:eligibility(l,c,l.suppressed,at),nextWindow:nextWindow(l.timezone,c.rules)})));
   });
   app.post('/api/org/:org/simulations',async(req,res)=>{
-    const org=orgId(req),a=await auth.access(req,org,'campaigns',true),b=z.object({campaignId:uuid,leadId:uuid,seconds:z.number().int().min(0).max(1800),requestKey:uuid,at:z.iso.datetime({offset:true})}).parse(req.body);res.json(await startCall(db,a,b));
+    const org=orgId(req),a=await auth.access(req,org,'campaigns',true),b=z.object({campaignId:uuid,leadId:uuid,seconds:z.number().int().min(0).max(1800),requestKey:uuid,at:z.iso.datetime({offset:true})}).parse(req.body);await requireUnlocked(db,org);res.json(await startCall(db,a,b));
   });
   app.post('/api/org/:org/simulations/:call/finish',async(req,res)=>{
     const org=orgId(req),a=await auth.access(req,org,'campaigns',true),b=z.object({outcome:z.enum(['No answer','Busy','IVR reached','Email provided','Decision maker unavailable','Callback requested','Interested','Not interested','Do not call','Failed']),answered:z.boolean()}).parse(req.body);
@@ -161,7 +164,7 @@ export function createApp(db: DB,config: Config) {
   });
   app.put('/api/org/:org/agents/:service',async(req,res)=>{
     const org=orgId(req),a=await auth.access(req,org,'agents',true),s=service.parse(req.params.service),b=z.object({name:text(80),tone:z.enum(['alex','sarah']),language:text(40),model:text(100).default('gpt-realtime-2.1-mini'),voice:z.enum(['marin','cedar','coral','alloy','ash','sage','verse']),knowledge:z.string().max(16000),instructions:z.string().max(8000)}).parse(req.body);
-    need(!a.companyId&&!a.locationId,403,'Agent profiles apply to the whole workspace; an unscoped manager or owner must change them.');
+    need(!a.companyId&&!a.locationId,403,'Agent profiles apply to the whole workspace; an unscoped manager or owner must change them.');await requireUnlocked(db,org);
     await db.query('UPDATE agents SET name=$1,tone=$2,language=$3,voice=$4,knowledge=$5,instructions=$6,model=$7 WHERE org_id=$8 AND service=$9',[b.name,b.tone,b.language,b.voice,b.knowledge,b.instructions,b.model,org,s]);await audit(db,a.user.id,org,'agent.updated',{service:s});res.json({ok:true});
   });
   app.get('/api/org/:org/wallet',async(req,res)=>{
@@ -287,6 +290,7 @@ export function createApp(db: DB,config: Config) {
   });
   registerVoice(app,db,auth,gatewayConfig);
   registerPasswordReset(app,db,auth,config.origin);
+  registerSignup(app,db,auth,{origin:config.origin});
   registerBusiness(app,db,auth);
   registerStaffChat(app,db,auth,chatConfig);
   app.use('/chat-api',(_req,res)=>res.status(404).json({error:'Chat endpoint not found.'}));
