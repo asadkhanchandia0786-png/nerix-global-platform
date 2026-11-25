@@ -50,3 +50,10 @@ No new environment variables. The restart runs migration 007. Check `curl https:
 
 ## Not changed
 Pricing, rates, models, pilot-mode safeguards, existing UI and the gateway contract are unchanged. The older "Create a separate demo workspace" link still exists in demo mode only.
+
+## Dashboard polish added in 0.5.0 (UI and PWA only)
+- No carrier name appears in the dashboard: the number field is just "Phone number" and customer help text no longer names a phone provider.
+- The "Private pilot" labels are gone (sign-in page, top bar, admin customer list). Only genuine states remain: "Demo · test credits" and "Internal company".
+- Customers see their assigned numbers read-only. Assign, Pause/Resume, Gateway route, the phone-service and email-status tiles, and the server-secrets note on the chat page are visible to the Nerix owner only. The API already withheld the gateway route from customers; a new test locks that in.
+- Installable app: `public/manifest.json`, `public/sw.js` (offline page only; never stores API or signed-in data), `public/pwa-register.js`, `public/offline.html` and icons in `public/icons/`. The icons are a simple "N" placeholder in the manifest colours; replace `icon-192.png`, `icon-512.png` and `apple-touch-icon.png` with your final logo at the same sizes (keep the artwork inside the centre 60% so Android's round crop does not cut it).
+- Play Store (later): PWABuilder will give you an `assetlinks.json` file that must be served at `/.well-known/assetlinks.json`; the server's static handler hides dot-folders, so that needs one small route when you reach that step.

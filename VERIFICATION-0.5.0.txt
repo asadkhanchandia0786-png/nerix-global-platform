@@ -2,6 +2,6 @@ Verified when 0.5.0 was prepared (offline sandbox, no npm install, no database):
 - Every changed or new .ts/.tsx file parses.
 - Type-checked against stub declarations: no new type errors in server code compared with 0.4.0.
 NOT verified here (run on Replit or the Oracle VM):
-- npm run verify  (typecheck + all tests + build). New tests: tests/signup.test.ts (14 tests).
+- npm run verify  (typecheck + all tests + build). New tests: tests/signup.test.ts (15 tests).
 - The sign-up screen and the Accounts admin tab have never been rendered in a browser.
 - A real Resend email has not been sent.

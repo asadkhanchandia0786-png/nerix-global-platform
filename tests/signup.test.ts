@@ -186,3 +186,14 @@ test('existing accounts and owner-created workspaces are unaffected by the lock'
   const org=ok(await owner.send('/workspaces',{name:'Owner made '+id(),industry:'general'})).id;
   assert.equal((await orgLock(db,org)).locked,false);
 });
+test('customers see their assigned number read-only: no gateway route, no assign, pause or release',async()=>{
+  const email=mail(),made=ok(await owner.send('/admin/accounts',{name:'Pat Plumber',business:'Pat Plumbing',email,password,activate:true,sendEmail:false}));
+  const cust=new Session();ok(await cust.send('/auth/login',{email,password}));await cust.sync();
+  const meta=ok(await cust.get(`/org/${made.orgId}/meta`)),did='+4420'+String(Math.floor(10000000+Math.random()*89999999));
+  const num=ok(await owner.send(`/org/${made.orgId}/voice/numbers`,{locationId:meta.locations[0].id,e164:did}));
+  const mine=ok(await cust.get(`/org/${made.orgId}/voice/numbers`));
+  assert.equal(mine.numbers.length,1);assert.equal(mine.numbers[0].e164,did);assert.equal(mine.numbers[0].route,null);
+  assert.ok(ok(await owner.get(`/org/${made.orgId}/voice/numbers`)).numbers[0].route);          // only the Nerix owner gets the gateway route
+  ok(await cust.send(`/org/${made.orgId}/voice/numbers`,{locationId:meta.locations[0].id,e164:'+442079460222'}),403);
+  ok(await cust.send(`/org/${made.orgId}/voice/numbers/${num.id}`,{status:'paused'},'patch'),403);
+});
