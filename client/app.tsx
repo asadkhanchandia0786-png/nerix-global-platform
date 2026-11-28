@@ -8,11 +8,17 @@ import {LiveChat} from './chat.tsx';
 import {BusinessSoftware} from './business.tsx';
 import {ServiceManagement} from './service-management.tsx';
 import {Reception,InboundCalls} from './voice.tsx';
+import {DEFAULT_SIGNUP_CURRENCY,SIGNUP_PLANS,readSignupCurrency,readSignupPlan,signupPlanDetails} from '../shared/signup-plans.ts';
 const pages=[['overview','Overview',LayoutDashboard],['reception','AI receptionist',PhoneIncoming],['inbound','Calls & callbacks',PhoneCall],['software','Business software',ClipboardList],['services','Services & subscriptions',Settings],['leads','Lead directory',Users],['campaigns','Campaigns',Radio],['agents','AI agents',Headphones],['calls','Call history',Phone],['tasks','Follow-ups',ClipboardList],['wallet','Wallet & billing',Wallet],['team','Team & locations',Users],['settings','Workspace settings',Settings],['chat','Live chat inbox',LifeBuoy],['support','Support',LifeBuoy],['referrals','Referral partners',Handshake],['admin','Nerix administration',ShieldCheck]] as const;
 const allowed:Record<string,string[]>={owner:pages.map(p=>p[0]),manager:['overview','reception','inbound','leads','campaigns','agents','calls','tasks','wallet','chat','support'],staff:['overview','inbound','leads','calls','tasks','chat','support'],viewer:['overview','inbound','leads','calls','tasks','wallet','support'],operations:['overview','campaigns','tasks','chat','support'],support:['overview','chat','support'],closer:['overview','tasks','chat','support'],partner:['referrals']};
 function Brand(){return <div className="brand"><img src="/assets/nerix-logo.png" alt=""/><div>NERIX<span>GLOBAL</span></div></div>;}
 function SignIn({done}:{done:()=>void}){
-  const state=useData('/auth/status'),industry=useData('/industries'),[mode,setMode]=useState(()=>new URLSearchParams(location.search).get('signup')==='1'?'register':'login'),[sent,setSent]=useState(''),[pending,setPending]=useState('');
+  const state=useData('/auth/status'),industry=useData('/industries'),[sent,setSent]=useState(''),[pending,setPending]=useState('');
+  const [signupParams]=useState(()=>new URLSearchParams(location.search));
+  const startsOnSignup=signupParams.get('signup')==='1';
+  const [mode,setMode]=useState(startsOnSignup?'register':'login');
+  const [plan,setPlan]=useState(()=>startsOnSignup?readSignupPlan(signupParams.get('plan')):undefined);
+  const currency=readSignupCurrency(signupParams.get('currency'))??DEFAULT_SIGNUP_CURRENCY;
   const invite=new URLSearchParams(location.hash.replace(/^#join\?/,'')).get('token');
   const resetToken=location.hash.startsWith('#reset?')?new URLSearchParams(location.hash.slice(7)).get('token'):null;
   useEffect(()=>{if(invite)setMode('join');},[invite]);
@@ -23,7 +29,26 @@ function SignIn({done}:{done:()=>void}){
     {['login','register','join'].includes(current)&&<div className="auth-tabs" role="tablist" aria-label="Account options"><button type="button" role="tab" aria-selected={current==='login'} className={current==='login'?'on':''} onClick={()=>{setSent('');setMode('login');}}>Sign in</button><button type="button" role="tab" aria-selected={current==='register'} className={current==='register'?'on':''} onClick={()=>{setSent('');setMode('register');}}>Create an account</button><button type="button" role="tab" aria-selected={current==='join'} className={current==='join'?'on':''} onClick={()=>{setSent('');setMode('join');}}>Have an invitation?</button></div>}
     {sent&&<div className="notice">{sent}</div>}
     {window.top!==window.self&&<div className="notice">For secure sign-in, <a href={window.location.href} target="_blank" rel="noreferrer">open this workspace in a new tab</a>.</div>}
-    {current==='register'?<Form submit="Create account →" onSubmit={async d=>{const email=str(d,'email');await api('/auth/register','POST',{name:str(d,'name'),business:str(d,'business'),email,password:str(d,'password')});setPending(email);setSent('');setMode('verify');}}>
+    {current==='register'?<Form submit="Create account →" onSubmit={async d=>{
+      const email=str(d,'email');
+      await api('/auth/register','POST',{
+        name:str(d,'name'),business:str(d,'business'),email,password:str(d,'password'),
+        ...(plan?{plan,currency}:{}),
+      });
+      setPending(email);setSent('');setMode('verify');
+    }}>
+      {plan&&<section className="signup-plan" aria-label="Selected plan">
+        <div aria-live="polite">
+          <strong>Selected Plan: {SIGNUP_PLANS[plan].name}</strong>
+          <p>{signupPlanDetails(plan,currency)}</p>
+        </div>
+        {currency!=='USD'&&<small>{currency} prices are for reference.</small>}
+        <label className="signup-plan-change">Change plan
+          <select value={plan} onChange={e=>setPlan(readSignupPlan(e.target.value)??plan)}>
+            {Object.entries(SIGNUP_PLANS).map(([key,option])=><option key={key} value={key}>{option.name}</option>)}
+          </select>
+        </label>
+      </section>}
       <Field label="Full name"><input name="name" autoComplete="name" required maxLength={200}/></Field>
       <Field label="Company / business name"><input name="business" autoComplete="organization" required maxLength={120}/></Field>
       <Field label="Work email"><input name="email" type="email" autoComplete="username" placeholder="you@company.com" required/></Field>

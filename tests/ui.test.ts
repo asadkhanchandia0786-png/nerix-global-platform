@@ -4,6 +4,7 @@ import {JSDOM} from 'jsdom';
 import request from 'supertest';
 import {openDB,migrate,type DB} from '../server/db.ts';
 import {createApp} from '../server/app.ts';
+import {startEmail} from '../server/email.ts';
 import React from 'react';
 const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'http://localhost/'});
 for(const key of ['window','document','HTMLElement','HTMLInputElement','HTMLSelectElement','HTMLTextAreaElement','Node','Event','MouseEvent','FormData','MutationObserver','location','history'])Object.defineProperty(globalThis,key,{value:(dom.window as any)[key],configurable:true,writable:true});
@@ -15,6 +16,7 @@ const setupToken='ui-test-setup-token-at-least-24-chars';
 before(async()=>{
   db=await openDB(undefined,'memory://');await migrate(db);app=createApp(db,{mode:'demo',setupToken});agent=request.agent(app);
   globalThis.fetch=(async(url:any,options:any={})=>{
+    if(String(url)==='https://api.resend.com/emails')return new Response(null,{status:200});
     const method=(options.method||'GET').toLowerCase(),r=(agent as any)[method](String(url));for(const[k,v]of Object.entries(options.headers||{}))r.set(k,v as string);if(options.body)r.send(options.body);const result=await r;return{ok:result.status>=200&&result.status<300,status:result.status,json:async()=>result.body} as Response;
   }) as typeof fetch;
   const lib=await import('@testing-library/react');ui=lib;lib.configure({asyncUtilTimeout:8000});screen=lib.screen;within=lib.within;cleanup=lib.cleanup;
@@ -55,4 +57,39 @@ test('Owner converts the existing Dentive workspace through the UI; its dashboar
   nav=within(screen.getByRole('navigation'));await user.click(nav.getByRole('button',{name:'Wallet & billing'}));await screen.findByRole('heading',{name:'Your company. No Nerix service charges.'});
   assert.equal(screen.queryByRole('button',{name:'Add credit'}),null);assert.equal(screen.queryByRole('button',{name:'Set preferences'}),null);await screen.findByText('No Nerix top-up or auto-recharge');
   await user.click(nav.getByRole('button',{name:'Campaigns'}));const simulate=await screen.findByRole('button',{name:'Simulate'});assert.equal(simulate.disabled,false);
+});
+test('Marketing signup saves the changed plan and shows it in Customers before verification',async()=>{
+  cleanup();
+  const owner=agent;
+  const {App}=await import('../client/app.tsx');
+  agent=request.agent(app);
+  startEmail(db,{apiKey:'re_test',from:'Nerix <test@example.test>'});
+  try {
+    history.replaceState(null,'','/?signup=1&plan=payg&currency=gbp');
+    ui.render(React.createElement(App));
+    await screen.findByRole('tab',{name:'Create an account',selected:true});
+    await screen.findByText('£0.28/min · Prepaid credit from £75 · Billed per second');
+    await user.type(screen.getByLabelText('Full name'),'Plan Tester');
+    await user.type(screen.getByLabelText('Company / business name'),'Plan Test Workspace');
+    await user.type(screen.getByLabelText('Work email'),'signup-plan@example.test');
+    await user.type(screen.getByLabelText('Password'),'UI-test-password-12345');
+    await user.selectOptions(screen.getByLabelText('Change plan'),'scale');
+    await screen.findByText('£225/month · 1,200 included minutes');
+    await user.click(screen.getByRole('button',{name:'Create account →'}));
+    await screen.findByRole('heading',{name:'Check your email.'});
+
+    cleanup();
+    agent=owner;
+    history.replaceState(null,'','/');
+    ui.render(React.createElement(App));
+    await user.click(await screen.findByRole('button',{name:'Nerix administration'}));
+    const workspace=await screen.findByRole('row',{name:/Plan Test Workspace/});
+    assert.ok(within(workspace).getByText('Scale Monthly'));
+    assert.ok(within(workspace).getByText('GBP'));
+  } finally {
+    cleanup();
+    agent=owner;
+    history.replaceState(null,'','/');
+    startEmail(db,{});
+  }
 });

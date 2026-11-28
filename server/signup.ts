@@ -8,6 +8,7 @@ import { Auth, hash, hashPassword, randomToken, equal } from './auth.ts';
 import { audit, createOrg, email, id, need, text, uuid } from './core.ts';
 import { queueEmail, emailEnabled, verificationEmail, accountCreatedEmail } from './email.ts';
 import { orgLock } from './activation.ts';
+import { DEFAULT_SIGNUP_CURRENCY, readSignupCurrency, readSignupPlan } from '../shared/signup-plans.ts';
 
 const CODE_MINUTES = 15, MAX_ATTEMPTS = 5, RESEND_SECONDS = 60, STALE_MS = 10 * 60 * 1000;
 const codeHash = (userId: string, code: string) => hash(`nerix-verify:${userId}:${code}`);
@@ -40,7 +41,11 @@ export function registerSignup(app: Express, db: DB, auth: Auth, opts: { origin?
 
   app.post('/api/auth/register', async (req, res) => {
     await limit(db, `register-ip:${req.ip}`, 5, 60);
-    const b = z.object({ name: text(200), business: text(120), email, password }).parse(req.body);
+    const b = z.object({ name: text(200), business: text(120), email, password,
+      plan: z.string().optional(), currency: z.string().optional() }).parse(req.body);
+    const plan = readSignupPlan(b.plan);
+    const currency = readSignupCurrency(b.currency) ?? DEFAULT_SIGNUP_CURRENCY;
+    const planSettings = JSON.stringify(plan ? { signupPlan: { plan, currency } } : {});
     await limit(db, `register-email:${b.email}`, 3, 60);
     need(emailEnabled(), 503, 'Email is not configured yet, so sign-up is unavailable. Please contact Nerix.');
     const hashed = await hashPassword(b.password);
@@ -57,7 +62,10 @@ export function registerSignup(app: Express, db: DB, auth: Auth, opts: { origin?
           const org = (await q.query('SELECT o.id,o.name FROM organizations o JOIN memberships m ON m.org_id=o.id AND m.role=\'owner\' WHERE m.user_id=$1 AND o.self_registered=true LIMIT 1', [existing.id])).rows[0];
           await q.query('UPDATE users SET name=$2,password_hash=$3 WHERE id=$1', [existing.id, b.name, hashed]);
           await q.query('DELETE FROM sessions WHERE user_id=$1', [existing.id]);
-          if (org) { await q.query('UPDATE organizations SET name=$2 WHERE id=$1', [org.id, b.business]); await q.query('UPDATE companies SET name=$3 WHERE org_id=$1 AND name=$2', [org.id, org.name, b.business]); }
+          if (org) {
+            await q.query("UPDATE organizations SET name=$2,settings=(settings-'signupPlan')||$3::jsonb WHERE id=$1", [org.id, b.business, planSettings]);
+            await q.query('UPDATE companies SET name=$3 WHERE org_id=$1 AND name=$2', [org.id, org.name, b.business]);
+          }
           await issueCode(q, existing.id, b.email, b.name);
           await q.query('UPDATE email_verifications SET created_at=now() WHERE user_id=$1', [existing.id]);
           await audit(q, existing.id, org?.id ?? null, 'signup.re_registered');
@@ -68,7 +76,7 @@ export function registerSignup(app: Express, db: DB, auth: Auth, opts: { origin?
       const userId = id();
       await q.query('INSERT INTO users(id,email,name,password_hash,email_verified_at,self_registered) VALUES($1,$2,$3,$4,NULL,true)', [userId, b.email, b.name, hashed]);
       const org = await createOrg(q, b.business, 'general', userId, false);
-      await q.query("UPDATE organizations SET activation_status='locked',self_registered=true WHERE id=$1", [org.id]);
+      await q.query("UPDATE organizations SET activation_status='locked',self_registered=true,settings=settings||$2::jsonb WHERE id=$1", [org.id, planSettings]);
       await audit(q, userId, org.id, 'signup.registered', { business: b.business });
       await issueCode(q, userId, b.email, b.name);
     });

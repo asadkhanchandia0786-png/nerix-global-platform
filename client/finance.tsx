@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {Plus,Wallet,ArrowDownLeft,ArrowUpRight,RefreshCw,ShieldCheck,Copy,Users,Settings,Check,Pause,Play,FileText} from 'lucide-react';
 import {api,useApp,useData,Load,Header,Card,Metric,Badge,Status,Empty,Table,Field,Form,str,Modal,Action,fmtDate,Success,type Data} from './lib.tsx';
 import {CURRENCIES,SERVICES,money,INTERNAL_ROLES} from '../shared/constants.ts';
+import {SIGNUP_PLANS,readSignupCurrency,readSignupPlan} from '../shared/signup-plans.ts';
 import {AccountsAdmin} from './accounts.tsx';
 const Currency=({value='USD',onChange,name='currency'}:{value?:string;onChange?:(v:string)=>void;name?:string})=><select name={name} {...(onChange?{value,onChange:(e:React.ChangeEvent<HTMLSelectElement>)=>onChange(e.target.value)}:{defaultValue:value})}>{CURRENCIES.map(([c,n,s])=><option key={c} value={c}>{n} — {c} ({s})</option>)}</select>;
 export function Billing(){
@@ -24,7 +25,27 @@ export function Admin(){
   const{epoch,refresh,notify}=useApp(),state=useData('/admin',epoch),industry=useData('/industries',epoch),[tab,setTab]=useState('customers'),[modal,setModal]=useState(''),[selected,setSelected]=useState<Data|null>(null),[invite,setInvite]=useState(''),[privateLink,setPrivateLink]=useState('');
   const open=(type:string,row?:Data)=>{setSelected(row||null);setModal(type);};
   return <><Header eyebrow="NERIX OPERATIONS" title="A clear view of your business." description="Manage customer access, your internal team and commercial decisions. Sensitive actions are audited." action={<button className="button primary" onClick={()=>open('workspace')}><Plus size={17}/>New workspace</button>}/><div className="tabs">{['customers','accounts','internal team','refunds','referrals','industries','audit'].map(t=><button key={t} className={tab===t?'active':''} onClick={()=>setTab(t)}>{t}</button>)}</div><Load state={state}>{d=><>
-    {tab==='customers'&&<Card title="Customer workspaces"><Table headers={['Workspace','Balance','Service','Actions']}>{d.orgs.map((o:Data)=><tr key={o.id}><td><strong>{o.name}</strong><small>{o.industry} · {o.billing_mode==='internal'?'Internal company · Nerix fees waived':o.is_demo?'Demo / test funds':'Customer workspace'}</small></td><td>{o.billing_mode==='internal'?'No deposit required':<>{money(Number(o.paid)+Number(o.bonus))}<small>{money(o.reserved)} reserved</small></>}</td><td><Status value={o.paused?'paused':'active'}/></td><td><div className="button-row wrap"><button className="text-button" onClick={()=>open('commercial',o)}>Rates & pause</button>{o.billing_mode!=='internal'&&<><button className="text-button" onClick={()=>open('credit',o)}>Credit</button><button className="text-button" onClick={()=>open('exception',o)}>Private deposit</button>{!o.is_demo&&<button className="text-button" onClick={()=>open('manual',o)}>Verify transfer</button>}{o.is_demo&&<button className="text-button" onClick={()=>open('internal-company',o)}>Make internal company</button>}</>}</div></td></tr>)}</Table></Card>}
+    {tab==='customers'&&<Card title="Customer workspaces">
+      <Table headers={['Workspace','Sign-up plan','Balance','Service','Actions']}>{d.orgs.map((o:Data)=>{
+        const selection=o.settings?.signupPlan;
+        const plan=readSignupPlan(selection?.plan),currency=readSignupCurrency(selection?.currency);
+        return <tr key={o.id}>
+          <td><strong>{o.name}</strong><small>{o.industry} · {o.billing_mode==='internal'?'Internal company · Nerix fees waived':o.is_demo?'Demo / test funds':'Customer workspace'}</small></td>
+          <td>{plan&&currency?<><strong>{SIGNUP_PLANS[plan].name}</strong><small>{currency}</small></>:'—'}</td>
+          <td>{o.billing_mode==='internal'?'No deposit required':<>{money(Number(o.paid)+Number(o.bonus))}<small>{money(o.reserved)} reserved</small></>}</td>
+          <td><Status value={o.paused?'paused':'active'}/></td>
+          <td><div className="button-row wrap">
+            <button className="text-button" onClick={()=>open('commercial',o)}>Rates & pause</button>
+            {o.billing_mode!=='internal'&&<>
+              <button className="text-button" onClick={()=>open('credit',o)}>Credit</button>
+              <button className="text-button" onClick={()=>open('exception',o)}>Private deposit</button>
+              {!o.is_demo&&<button className="text-button" onClick={()=>open('manual',o)}>Verify transfer</button>}
+              {o.is_demo&&<button className="text-button" onClick={()=>open('internal-company',o)}>Make internal company</button>}
+            </>}
+          </div></td>
+        </tr>;
+      })}</Table>
+    </Card>}
     {tab==='accounts'&&<AccountsAdmin/>}
     {tab==='internal team'&&<Card title="Nerix internal team" aside={<button className="button primary" onClick={()=>open('internal-invite')}><Plus size={16}/>Invite staff</button>}><Table headers={['Person','Role','Assigned customers','Status','Access']}>{d.users.filter((u:Data)=>u.platform_role).map((u:Data)=><tr key={u.id}><td><strong>{u.name}</strong><small>{u.email}</small></td><td>{u.platform_role}</td><td>{u.platform_role==='owner'?'All workspaces':d.assignments.filter((s:Data)=>s.user_id===u.id).map((s:Data)=>d.orgs.find((o:Data)=>o.id===s.org_id)?.name).join(', ')||'None'}</td><td><Status value={u.active?'active':'paused'}/></td><td>{u.platform_role!=='owner'&&<button className="text-button" onClick={()=>open('internal-user',u)}>Manage</button>}</td></tr>)}</Table><div className="card-foot">Removing or suspending staff revokes sessions. Support staff receive no refunds, recordings, exports or credit controls.</div>{d.invitations?.filter((i:Data)=>!i.used_at&&new Date(i.expires_at)>new Date()).map((i:Data)=><div className="list-row" key={i.id}><div>{i.email}<small>Pending {i.role} invitation</small></div><Action onClick={async()=>{await api(`/admin/invitations/${i.id}`,'DELETE',{});refresh();}}>Revoke</Action></div>)}</Card>}
     {tab==='refunds'&&<Card title="Refund review">{d.refunds.length?<Table headers={['Customer','Amount','Status','Requested','Review']}>{d.refunds.map((r:Data)=><tr key={r.id}><td>{r.name}</td><td>{money(r.amount)}</td><td><Status value={r.status}/></td><td>{fmtDate(r.created_at)}</td><td><button className="text-button" onClick={()=>open('refund',r)}>Review</button></td></tr>)}</Table>:<Empty title="No refunds to review" detail="Customer requests reserve unused paid credit and pause service until review."/>}</Card>}
